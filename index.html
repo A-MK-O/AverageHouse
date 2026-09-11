@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Please draw a house</title>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: white;
+      color: black;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+
+      display: flex;
+      align-items: center;
+      justify-content: center;
+
+      padding: 30px;
+    }
+
+    main {
+      width: min(520px, 100%);
+      text-align: center;
+    }
+
+    h1 {
+      margin: 0 0 28px;
+
+      font-size: 28px;
+      font-weight: 400;
+    }
+
+    .canvas-wrapper {
+      width: 100%;
+      aspect-ratio: 1 / 1;
+
+      border: 2px solid black;
+
+      background: white;
+    }
+
+    canvas {
+      display: block;
+
+      width: 100%;
+      height: 100%;
+
+      background: white;
+
+      touch-action: none;
+      cursor: crosshair;
+    }
+
+    button {
+      margin-top: 24px;
+
+      padding: 12px 30px;
+
+      border: 2px solid black;
+      border-radius: 0;
+
+      background: white;
+      color: black;
+
+      font: inherit;
+      font-size: 18px;
+
+      cursor: pointer;
+    }
+
+    button:hover {
+      background: black;
+      color: white;
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: default;
+    }
+
+    #status {
+      min-height: 24px;
+
+      margin-top: 14px;
+
+      font-size: 14px;
+    }
+
+    #count {
+      margin-top: 18px;
+
+      font-size: 14px;
+    }
+
+    [hidden] {
+      display: none !important;
+    }
+  </style>
+</head>
+
+
+<body>
+
+  <main>
+
+    <!-- DRAWING SCREEN -->
+
+    <section id="drawing-screen">
+
+      <h1>Please draw a house</h1>
+
+      <div class="canvas-wrapper">
+        <canvas
+          id="drawing-canvas"
+          width="512"
+          height="512"
+        ></canvas>
+      </div>
+
+      <button id="finish-button">
+        Finish
+      </button>
+
+      <div id="status"></div>
+
+    </section>
+
+
+    <!-- AVERAGE SCREEN -->
+
+    <section
+      id="average-screen"
+      hidden
+    >
+
+      <h1>The average house</h1>
+
+      <div class="canvas-wrapper">
+        <canvas
+          id="average-canvas"
+          width="512"
+          height="512"
+        ></canvas>
+      </div>
+
+      <div id="count"></div>
+
+    </section>
+
+  </main>
+
+
+  <script>
+
+    /* ==========================================
+       SUPABASE
+       ========================================== */
+
+    const SUPABASE_URL =
+      "https://YOUR_PROJECT.supabase.co";
+
+    const SUPABASE_PUBLISHABLE_KEY =
+      "YOUR_PUBLISHABLE_KEY";
+
+
+    /* ==========================================
+       DRAWING SETTINGS
+       ========================================== */
+
+    const STORAGE_SIZE = 128;
+
+    const TOTAL_PIXELS =
+      STORAGE_SIZE * STORAGE_SIZE;
+
+    const TOTAL_BYTES =
+      TOTAL_PIXELS / 8;
+
+
+    /* ==========================================
+       CANVAS
+       ========================================== */
+
+    const drawingCanvas =
+      document.getElementById("drawing-canvas");
+
+    const drawingContext =
+      drawingCanvas.getContext(
+        "2d",
+        { willReadFrequently: true }
+      );
+
+
+    const averageCanvas =
+      document.getElementById("average-canvas");
+
+    const averageContext =
+      averageCanvas.getContext("2d");
+
+
+    const finishButton =
+      document.getElementById("finish-button");
+
+    const status =
+      document.getElementById("status");
+
+    const drawingScreen =
+      document.getElementById("drawing-screen");
+
+    const averageScreen =
+      document.getElementById("average-screen");
+
+    const countElement =
+      document.getElementById("count");
+
+
+    /* ==========================================
+       INITIAL CANVAS
+       ========================================== */
+
+    drawingContext.fillStyle = "white";
+
+    drawingContext.fillRect(
+      0,
+      0,
+      drawingCanvas.width,
+      drawingCanvas.height
+    );
+
+    drawingContext.strokeStyle = "black";
+
+    drawingContext.lineWidth = 18;
+
+    drawingContext.lineCap = "round";
+
+    drawingContext.lineJoin = "round";
+
+
+    /* ==========================================
+       DRAWING
+       ========================================== */
+
+    let drawing = false;
+
+
+    function getPointerPosition(event) {
+
+      const rectangle =
+        drawingCanvas.getBoundingClientRect();
+
+      return {
+        x:
+          (event.clientX - rectangle.left) *
+          (drawingCanvas.width / rectangle.width),
+
+        y:
+          (event.clientY - rectangle.top) *
+          (drawingCanvas.height / rectangle.height)
+      };
+
+    }
+
+
+    drawingCanvas.addEventListener(
+      "pointerdown",
+      event => {
+
+        drawing = true;
+
+        drawingCanvas.setPointerCapture(
+          event.pointerId
+        );
+
+        const point =
+          getPointerPosition(event);
+
+        drawingContext.beginPath();
+
+        drawingContext.moveTo(
+          point.x,
+          point.y
+        );
+
+        /*
+          Make a tiny initial mark,
+          so a click also produces a dot.
+        */
+
+        drawingContext.lineTo(
+          point.x + 0.01,
+          point.y + 0.01
+        );
+
+        drawingContext.stroke();
+
+      }
+    );
+
+
+    drawingCanvas.addEventListener(
+      "pointermove",
+      event => {
+
+        if (!drawing) {
+          return;
+        }
+
+        const point =
+          getPointerPosition(event);
+
+        drawingContext.lineTo(
+          point.x,
+          point.y
+        );
+
+        drawingContext.stroke();
+
+      }
+    );
+
+
+    function stopDrawing() {
+      drawing = false;
+    }
+
+
+    drawingCanvas.addEventListener(
+      "pointerup",
+      stopDrawing
+    );
+
+    drawingCanvas.addEventListener(
+      "pointercancel",
+      stopDrawing
+    );
+
+
+    /* ==========================================
+       CONVERT DRAWING TO 128 × 128 BITMAP
+       ========================================== */
+
+    function encodeDrawing() {
+
+      const smallCanvas =
+        document.createElement("canvas");
+
+      smallCanvas.width = STORAGE_SIZE;
+      smallCanvas.height = STORAGE_SIZE;
+
+
+      const context =
+        smallCanvas.getContext(
+          "2d",
+          { willReadFrequently: true }
+        );
+
+
+      context.fillStyle = "white";
+
+      context.fillRect(
+        0,
+        0,
+        STORAGE_SIZE,
+        STORAGE_SIZE
+      );
+
+
+      context.imageSmoothingEnabled = true;
+
+      context.drawImage(
+        drawingCanvas,
+        0,
+        0,
+        STORAGE_SIZE,
+        STORAGE_SIZE
+      );
+
+
+      const image =
+        context.getImageData(
+          0,
+          0,
+          STORAGE_SIZE,
+          STORAGE_SIZE
+        );
+
+
+      const bytes =
+        new Uint8Array(TOTAL_BYTES);
+
+
+      let hasDrawing = false;
+
+
+      for (
+        let pixel = 0;
+        pixel < TOTAL_PIXELS;
+        pixel++
+      ) {
+
+        const dataPosition =
+          pixel * 4;
+
+        /*
+          Image is monochrome,
+          so we only need red.
+        */
+
+        const brightness =
+          image.data[dataPosition];
+
+
+        /*
+          Everything dark enough
+          becomes a black drawing pixel.
+        */
+
+        const isBlack =
+          brightness < 230;
+
+
+        if (isBlack) {
+
+          hasDrawing = true;
+
+          const byteIndex =
+            Math.floor(pixel / 8);
+
+          const bitIndex =
+            7 - (pixel % 8);
+
+          bytes[byteIndex] |=
+            1 << bitIndex;
+
+        }
+
+      }
+
+
+      if (!hasDrawing) {
+        return null;
+      }
+
+
+      let binary = "";
+
+      for (
+        let i = 0;
+        i < bytes.length;
+        i++
+      ) {
+
+        binary +=
+          String.fromCharCode(bytes[i]);
+
+      }
+
+
+      return btoa(binary);
+
+    }
+
+
+    /* ==========================================
+       SEND DRAWING
+       ========================================== */
+
+    async function submitDrawing(encodedDrawing) {
+
+      const response =
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/rpc/submit_house_drawing`,
+          {
+            method: "POST",
+
+            headers: {
+              "apikey":
+                SUPABASE_PUBLISHABLE_KEY,
+
+              "Content-Type":
+                "application/json"
+            },
+
+            body: JSON.stringify({
+              p_pixels: encodedDrawing
+            })
+          }
+        );
+
+
+      if (!response.ok) {
+
+        const message =
+          await response.text();
+
+        throw new Error(message);
+
+      }
+
+    }
+
+
+    /* ==========================================
+       GET COLLECTIVE AVERAGE
+       ========================================== */
+
+    async function getAverage() {
+
+      const response =
+        await fetch(
+          `${SUPABASE_URL}/rest/v1/rpc/get_house_average`,
+          {
+            method: "POST",
+
+            headers: {
+              "apikey":
+                SUPABASE_PUBLISHABLE_KEY,
+
+              "Content-Type":
+                "application/json"
+            },
+
+            body: "{}"
+          }
+        );
+
+
+      if (!response.ok) {
+
+        const message =
+          await response.text();
+
+        throw new Error(message);
+
+      }
+
+
+      return await response.json();
+
+    }
+
+
+    /* ==========================================
+       DRAW AVERAGE
+       ========================================== */
+
+    function renderAverage(data) {
+
+      const numberOfDrawings =
+        Number(data.count);
+
+      const counts =
+        data.counts;
+
+
+      const pixelCanvas =
+        document.createElement("canvas");
+
+      pixelCanvas.width =
+        STORAGE_SIZE;
+
+      pixelCanvas.height =
+        STORAGE_SIZE;
+
+
+      const context =
+        pixelCanvas.getContext("2d");
+
+
+      const image =
+        context.createImageData(
+          STORAGE_SIZE,
+          STORAGE_SIZE
+        );
+
+
+      for (
+        let pixel = 0;
+        pixel < TOTAL_PIXELS;
+        pixel++
+      ) {
+
+        const frequency =
+          counts[pixel] /
+          numberOfDrawings;
+
+
+        /*
+          0% drawn = white
+          100% drawn = black
+        */
+
+        const value =
+          Math.round(
+            255 * (1 - frequency)
+          );
+
+
+        const position =
+          pixel * 4;
+
+
+        image.data[position] =
+          value;
+
+        image.data[position + 1] =
+          value;
+
+        image.data[position + 2] =
+          value;
+
+        image.data[position + 3] =
+          255;
+
+      }
+
+
+      context.putImageData(
+        image,
+        0,
+        0
+      );
+
+
+      averageContext.fillStyle =
+        "white";
+
+      averageContext.fillRect(
+        0,
+        0,
+        averageCanvas.width,
+        averageCanvas.height
+      );
+
+
+      averageContext.imageSmoothingEnabled =
+        true;
+
+
+      averageContext.drawImage(
+        pixelCanvas,
+        0,
+        0,
+        averageCanvas.width,
+        averageCanvas.height
+      );
+
+
+      countElement.textContent =
+        `${numberOfDrawings} ${
+          numberOfDrawings === 1
+            ? "drawing"
+            : "drawings"
+        }`;
+
+    }
+
+
+    /* ==========================================
+       FINISH
+       ========================================== */
+
+    finishButton.addEventListener(
+      "click",
+      async () => {
+
+        const encodedDrawing =
+          encodeDrawing();
+
+
+        if (!encodedDrawing) {
+
+          status.textContent =
+            "Please draw something first.";
+
+          return;
+
+        }
+
+
+        finishButton.disabled =
+          true;
+
+        status.textContent =
+          "Submitting…";
+
+
+        try {
+
+          /*
+            Add this person's drawing
+            BEFORE loading the result.
+
+            Therefore the average they see
+            includes their own house.
+          */
+
+          await submitDrawing(
+            encodedDrawing
+          );
+
+
+          const average =
+            await getAverage();
+
+
+          renderAverage(average);
+
+
+          drawingScreen.hidden =
+            true;
+
+          averageScreen.hidden =
+            false;
+
+        }
+
+        catch (error) {
+
+          console.error(error);
+
+          status.textContent =
+            "Something went wrong. Please try again.";
+
+          finishButton.disabled =
+            false;
+
+        }
+
+      }
+    );
+
+  </script>
+
+</body>
+</html>
