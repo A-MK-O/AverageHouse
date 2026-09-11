@@ -729,18 +729,17 @@
             false;
 
         }
+catch (error) {
 
-        catch (error) {
+  console.error(error);
 
-          console.error(error);
+  status.textContent =
+    "ERROR: " + error.message;
 
-          status.textContent =
-            "Something went wrong. Please try again.";
+  finishButton.disabled =
+    false;
 
-          finishButton.disabled =
-            false;
-
-        }
+}
 
       }
     );
